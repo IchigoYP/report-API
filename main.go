@@ -15,9 +15,12 @@ import (
 )
 
 type SearchRequest struct {
-	Name  string `json:"name"`
-	ID    uint   `json:"id"`
-	Title string `json:"title"`
+	Name        string `json:"name"`
+	ID          uint   `json:"id"`
+	Title       string `json:"title"`
+	IsCompleted *bool  `json:"iscompleted"`
+	Style       string `json:"style"`
+	Language    string `json:"language"`
 }
 
 type User struct {
@@ -39,8 +42,8 @@ type Report struct {
 	TaskID      uint      `gorm:"not null"`
 	CreatedAt   time.Time `gorm:"default:CURRENT_TIMESTAMP"`
 	UpdatedAt   time.Time `gorm:"default:CURRENT_TIMESTAMP"`
-	Style       string    `gorm:"size:10;default:'です・ます調'"`  
-	Language    string    `gorm:"size:10;default:'日本語'"`  
+	Style       string    `gorm:"size:10;default:'です・ます調'"`
+	Language    string    `gorm:"size:10;default:'日本語'"`
 }
 
 type Task struct {
@@ -97,7 +100,6 @@ func searchUserHandler(db *gorm.DB) gin.HandlerFunc {
 			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 			return
 		}
-
 		var users []User
 		searchUsers(req, db, &users)
 		c.JSON(http.StatusOK, users)
@@ -134,8 +136,14 @@ func searchReport(req SearchRequest, db *gorm.DB, reports *[]Report, id uint) {
 	if req.Title != "" {
 		query = query.Where("title = ?", req.Title)
 	}
-	if req.ID != 0 {
-		query = query.Where("id = ?", req.ID)
+	if req.IsCompleted != nil {
+		query = query.Where("is_completed = ?", *req.IsCompleted)
+	}
+	if req.Language != "" {
+		query = query.Where("language = ?", req.Language)
+	}
+	if req.Style != "" {
+		query = query.Where("style = ?", req.Style)
 	}
 	query = query.Where("user_id = ?", id)
 	query.Find(reports)
@@ -161,7 +169,6 @@ func updateUserHandler(db *gorm.DB) gin.HandlerFunc {
 			c.JSON(http.StatusNotFound, gin.H{"error": "User not found"})
 			return
 		}
-
 		if err := c.ShouldBindJSON(&user); err != nil {
 			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 			return
@@ -183,8 +190,8 @@ func updateReportHandler(db *gorm.DB) gin.HandlerFunc {
 			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 			return
 		}
-		if !((report.Style == "だ・である調"||report.Style =="です・ます調")&&(report.Language == "日本語"||report.Language =="英語")){
-			c.JSON(http.StatusBadRequest, gin.H{"error": "not corect Style or Language"})
+		if !((report.Style == "だ・である調" || report.Style == "です・ます調") && (report.Language == "日本語" || report.Language == "英語")) {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "not correct Style or Language"})
 			return
 		}
 		db.Save(&report)
@@ -228,12 +235,12 @@ func createReportHandler(db *gorm.DB) gin.HandlerFunc {
 		}
 
 		var report Report
-		if err := c.ShouldBindJSON(&report); err != nil  {
+		if err := c.ShouldBindJSON(&report); err != nil {
 			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 			return
 		}
-		if !((report.Style == "だ・である調"||report.Style =="です・ます調")&&(report.Language == "日本語"||report.Language =="英語")){
-			c.JSON(http.StatusBadRequest, gin.H{"error": "not corect Style or Language"})
+		if !((report.Style == "だ・である調" || report.Style == "です・ます調") && (report.Language == "日本語" || report.Language == "英語")) {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "not correct Style or Language"})
 			return
 		}
 		report.UserID = user.ID
@@ -248,9 +255,9 @@ func createReportHandler(db *gorm.DB) gin.HandlerFunc {
 	}
 }
 
-func getReportHandler(db *gorm.DB) gin.HandlerFunc{
+func getReportHandler(db *gorm.DB) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		var report []Report
+		var report Report
 		id := c.Param("report_id")
 		if err := db.First(&report, id).Error; err != nil {
 			c.JSON(http.StatusNotFound, gin.H{"error": "report not found"})
@@ -260,11 +267,11 @@ func getReportHandler(db *gorm.DB) gin.HandlerFunc{
 	}
 }
 
-func getUserHandler(db *gorm.DB) gin.HandlerFunc{
+func getUserHandler(db *gorm.DB) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		var user []User
+		var user User
 		id := c.Param("id")
-		if err := db.First(&user, id).Error; err != nil {
+		if err := db.Preload("Reports").First(&user, id).Error; err != nil {
 			c.JSON(http.StatusNotFound, gin.H{"error": "User not found"})
 			return
 		}
